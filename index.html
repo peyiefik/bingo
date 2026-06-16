@@ -150,6 +150,15 @@
       font-size: 0.85rem;
       opacity: 0.8;
     }
+    .error {
+      background: #fff0cc;
+      border: 2px solid #ffd36a;
+      padding: 12px;
+      border-radius: 16px;
+      margin-bottom: 14px;
+      display: none;
+      font-weight: 700;
+    }
     @media (max-width: 700px) {
       body { padding: 8px; }
       .card { padding: 10px; border-radius: 18px; }
@@ -172,15 +181,16 @@
         <button id="copyLink">Copy link</button>
         <button id="clearMarks">Clear marks</button>
       </div>
+      <div class="error" id="errorBox"></div>
       <div class="status" id="status"></div>
       <div class="grid" id="grid"></div>
-      <div class="meta">Same seed = same card. Marks are saved locally in this browser.</div>
+      <div class="meta" id="meta"></div>
       <div class="share" id="shareUrl"></div>
     </section>
   </main>
 
   <script>
-    const BINGO_SQUARES = [
+    const DEFAULT_BINGO_SQUARES = [
       "premature lamp open",
       "no one catches ice king ball",
       "who is alex",
@@ -211,16 +221,69 @@
     const GRID_SIZE = 5;
     const CARD_SIZE = 25;
 
-    function getSeedFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("seed") || randomSeed();
-    }
-
     function randomSeed() {
       const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
       let out = "";
       for (let i = 0; i < 16; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
       return out;
+    }
+
+    function base64UrlDecodeUtf8(input) {
+      let base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+      while (base64.length % 4) base64 += "=";
+
+      const binary = atob(base64);
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+
+    function getPoolFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const encoded = params.get("pool");
+
+      if (!encoded) return DEFAULT_BINGO_SQUARES;
+
+      try {
+        const decoded = base64UrlDecodeUtf8(encoded);
+        const parsed = JSON.parse(decoded);
+
+        if (!Array.isArray(parsed)) throw new Error("Pool is not an array.");
+
+        const cleaned = [];
+        const seen = new Set();
+
+        for (const item of parsed) {
+          if (typeof item !== "string") continue;
+          const prompt = item.trim().replace(/\s+/g, " ");
+          if (!prompt) continue;
+
+          const key = prompt.toLowerCase();
+          if (seen.has(key)) continue;
+
+          seen.add(key);
+          cleaned.push(prompt);
+        }
+
+        if (cleaned.length < CARD_SIZE) {
+          throw new Error(`Pool only has ${cleaned.length} prompts; 25 are required.`);
+        }
+
+        return cleaned;
+      } catch (err) {
+        showError("Could not decode the custom bingo pool from the URL. Using default prompts instead.");
+        return DEFAULT_BINGO_SQUARES;
+      }
+    }
+
+    function showError(message) {
+      const box = document.getElementById("errorBox");
+      box.textContent = message;
+      box.style.display = "block";
+    }
+
+    function getSeedFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("seed") || randomSeed();
     }
 
     function hashString(str) {
@@ -252,11 +315,11 @@
     }
 
     function cardFromSeed(seed) {
-      return seededShuffle(BINGO_SQUARES, seed).slice(0, CARD_SIZE);
+      return seededShuffle(BINGO_POOL, seed).slice(0, CARD_SIZE);
     }
 
     function storageKey(seed) {
-      return `raid-bingo:${seed}`;
+      return `raid-bingo:${seed}:${hashString(JSON.stringify(BINGO_POOL))}`;
     }
 
     function loadMarks(seed) {
@@ -318,6 +381,8 @@
       return url.toString();
     }
 
+    const BINGO_POOL = getPoolFromUrl();
+
     let seed = getSeedFromUrl();
     let card = cardFromSeed(seed);
     let marks = loadMarks(seed);
@@ -327,11 +392,13 @@
     const seedLabel = document.getElementById("seedLabel");
     const seedInput = document.getElementById("seedInput");
     const shareUrl = document.getElementById("shareUrl");
+    const meta = document.getElementById("meta");
 
     function render() {
       seedLabel.textContent = `Seed: ${seed}`;
       seedInput.value = seed;
       shareUrl.textContent = currentUrl(seed);
+      meta.textContent = `Same seed + same prompt pool = same card. Pool size: ${BINGO_POOL.length}. Marks are saved locally in this browser.`;
 
       const lines = completedLines(marks);
       const winningIndexes = new Set(lines.flat());
