@@ -184,8 +184,8 @@
       <div class="error" id="errorBox"></div>
       <div class="status" id="status"></div>
       <div class="grid" id="grid"></div>
-      <div class="meta" id="meta"></div>
-      <div class="share" id="shareUrl"></div>
+      <div class="meta" id="meta" style="display: none;"></div>
+      <div class="share" id="shareUrl" style="display: none;"></div>
     </section>
   </main>
 
@@ -397,8 +397,8 @@
     function render() {
       seedLabel.textContent = `Seed: ${seed}`;
       seedInput.value = seed;
-      shareUrl.textContent = currentUrl(seed);
-      meta.textContent = `Same seed + same prompt pool = same card. Pool size: ${BINGO_POOL.length}. Marks are saved locally in this browser.`;
+      shareUrl.textContent = "";
+      meta.textContent = "";
 
       const lines = completedLines(marks);
       const winningIndexes = new Set(lines.flat());
